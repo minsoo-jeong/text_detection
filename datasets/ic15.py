@@ -34,7 +34,7 @@ class IC15(Dataset):
             augmented = self.transform(image=image, bboxes=bboxes, words=words)
         except Exception as e:
             print(f'>> Execption: {e}')
-            print(path, bboxes, words)
+            # print(path, bboxes, words)
             return self.__getitem__(index + 1 % len(self.items))
 
         image = augmented['image']

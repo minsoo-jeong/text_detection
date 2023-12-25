@@ -20,7 +20,7 @@ NORMALIZE_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32) * 255.0
 NORMALIZE_VARIANCE = np.array([0.229, 0.224, 0.225], dtype=np.float32) * 255.0
 
 
-def generate_pseudo_charbox(builder,model, image, bboxes, words):
+def generate_pseudo_charbox(builder, model, image, bboxes, words):
     if len(words) == 0:
         h, w = image.shape[:2]
         weight_character = np.zeros((h // 2, w // 2), dtype=np.float32)
@@ -45,7 +45,6 @@ def generate_pseudo_charbox(builder,model, image, bboxes, words):
         weight_affinity = weight_affinity.astype(np.float32)
 
     return weight_character, weight_affinity
-
 
 
 def img_normalize(src, mean=NORMALIZE_MEAN, var=NORMALIZE_VARIANCE):
