@@ -69,16 +69,66 @@ def scale_bboxes(bboxes, image_size, target_size, bbox_format='xyxy'):
 
 
 
-def check_bbox_validity(bbox,size=None):
+def check_validity(bbox,size=None, bbox_format='xyxy'):
     """
+    Check the validity of a bounding box.
 
+    Args:
+    - bbox (list or numpy.ndarray): Bounding box coordinates in the format specified by bbox_format.
+                                    For bbox_format='xyxy', format is [x1, y1, x2, y2].
+                                    For bbox_format='xy', format is [num_points, 2].
+    - size (tuple, optional): Image size in the format (width, height). Defaults to None.
+    - bbox_format (str, optional): Format of the bounding box coordinates. Possible values: 'xyxy', 'xy'.
+                                   'xyxy' represents [x1, y1, x2, y2].
+                                   'xy' represents [num_points, 2]. Defaults to 'xyxy'.
     """
-    valid = bbox[0] <= bbox[2] and bbox[1] <= bbox[3]
+    if isinstance(bbox,list):
+        bbox = np.array(bbox)
 
-    if size:
-        width,height=size
-        valid = valid and (0 <= bbox[0] <= width) and (0 <= bbox[1] <= height) and (
-            0 <= bbox[2] <= width) and (0 <= bbox[3] <= height)
+
+    if bbox_format=='xyxy':
+        valid = bbox[0] <= bbox[2] and bbox[1] <= bbox[3]
+        if size:
+            width,height=size
+            valid = valid and (0 <= bbox[0] <= width) and (0 <= bbox[1] <= height) and (
+                0 <= bbox[2] <= width) and (0 <= bbox[3] <= height)
+    elif bbox_format=='xy':
+        if size is None:
+            valid = np.all(0 <= bbox[:, 0]) and np.all(0 <= bbox[:, 1])
+        else:
+            valid = np.all((0 <= bbox[:, 0]) < size[0]) and np.all((0 <= bbox[:, 1]) < size[1])
+
+    return valid
+
+
+def check_bbox_validity(bbox,size=None, bbox_format='xyxy'):
+    """
+    Check the validity of a bounding box.
+
+    Args:
+    - bbox (list or numpy.ndarray): Bounding box coordinates in the format specified by bbox_format.
+                                    For bbox_format='xyxy', format is [x1, y1, x2, y2].
+                                    For bbox_format='xy', format is [num_points, 2].
+    - size (tuple, optional): Image size in the format (width, height). Defaults to None.
+    - bbox_format (str, optional): Format of the bounding box coordinates. Possible values: 'xyxy', 'xy'.
+                                   'xyxy' represents [x1, y1, x2, y2].
+                                   'xy' represents [num_points, 2]. Defaults to 'xyxy'.
+    """
+    if isinstance(bbox,list):
+        bbox = np.array(bbox)
+
+
+    if bbox_format=='xyxy':
+        valid = bbox[0] <= bbox[2] and bbox[1] <= bbox[3]
+        if size:
+            width,height=size
+            valid = valid and (0 <= bbox[0] <= width) and (0 <= bbox[1] <= height) and (
+                0 <= bbox[2] <= width) and (0 <= bbox[3] <= height)
+    elif bbox_format=='xy':
+        if size is None:
+            valid = np.all(0 <= bbox[:, 0]) and np.all(0 <= bbox[:, 1])
+        else:
+            valid = np.all((0 <= bbox[:, 0]) < size[0]) and np.all((0 <= bbox[:, 1]) < size[1])
 
     return valid
 
