@@ -10,12 +10,12 @@ from .Transformer import Transformer
 
 
 class midlinePredictor(nn.Module):
-    def __init__(self, seg_channel):
+    def __init__(self, seg_channel,node_num,mid_node_num):
         super(midlinePredictor, self).__init__()
         self.seg_channel = seg_channel
         self.clip_dis = 100
-        self.num_polygon_points = 20
-        self.num_midline_points = 10
+        self.num_polygon_points = node_num
+        self.num_midline_points = mid_node_num
         self.midline_preds = nn.ModuleList()
         self.contour_preds = nn.ModuleList()
         self.iter = 3
@@ -42,7 +42,8 @@ class midlinePredictor(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def forward(self, x, init_polys, inds):
-
+        if not self.training:
+            self.iter = 1
         def get_node_feature(features, polys, inds):
             batch_size = features.shape[0]
             # normalize [-1, 1]

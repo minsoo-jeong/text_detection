@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     set_seed(42)
 
-    size = 1536
+    size = 640
     transform = A.Compose(
         [
             A.LongestMaxSize(size),

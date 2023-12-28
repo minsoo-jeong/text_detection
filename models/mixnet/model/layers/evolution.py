@@ -67,7 +67,7 @@ def get_sample_point(text_mask, num_points, approx_factor, scales=None):
 
 
 class Evolution(nn.Module):
-    def __init__(self, node_num, seg_channel):
+    def __init__(self, seg_channel, node_num):
         super(Evolution, self).__init__()
         self.node_num = node_num
         self.seg_channel = seg_channel
