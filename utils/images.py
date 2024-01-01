@@ -88,3 +88,9 @@ def unnormalize_image_tensor(tensor, value_range=None, scale_each=False):
         norm_range(tensor, value_range)
 
     return tensor
+
+
+def tensor_to_image(tensor):
+    image = unnormalize_image_tensor(tensor).cpu().numpy().transpose(1, 2, 0) * 255.
+    image = image.astype(np.uint8)
+    return image

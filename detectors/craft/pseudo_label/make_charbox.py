@@ -105,16 +105,10 @@ class PseudoCharBoxBuilder:
             short_side = h
             M = cv2.getPerspectiveTransform(
                 np.float32(box),
-                np.float32(
-                    np.array(
-                        [
-                            [0, 0],
-                            [long_side, 0],
-                            [long_side, short_side],
-                            [0, short_side],
-                        ]
-                    )
-                ),
+                np.float32(np.array([[0, 0],
+                                     [long_side, 0],
+                                     [long_side, short_side],
+                                     [0, short_side]])),
             )
             self.flag = False
 
@@ -124,16 +118,17 @@ class PseudoCharBoxBuilder:
         return results
 
     def inference_word_box(self, net, word_image):
+
         if net.training:
             net.eval()
 
         device = next(net.parameters()).device
         with torch.no_grad():
-            word_img_torch = torch.from_numpy(
-                img_normalize(word_image, NORMALIZE_MEAN, NORMALIZE_VARIANCE)
-            )
-            word_img_torch = word_img_torch.permute(2, 0, 1).unsqueeze(0)
+            # word_img_torch = torch.from_numpy(
+            #     img_normalize(word_image, NORMALIZE_MEAN, NORMALIZE_VARIANCE)
+            # )
             # word_img_torch = word_img_torch.to(torch.device(f'cuda'))
+            word_img_torch=torch.from_numpy(word_image).permute(2, 0, 1).unsqueeze(0)
             word_img_torch = word_img_torch.to(device)
             with torch.cuda.amp.autocast():
                 word_img_scores, _ = net(word_img_torch)
@@ -199,7 +194,6 @@ class PseudoCharBoxBuilder:
         src = image
 
         for word_bbox, word in zip(word_bboxes, words):
-
             flag, word_image, M, horizontal_text_bool = self.crop_image_by_bbox(src, word_bbox, word)
             if not flag:
                 continue
@@ -218,6 +212,10 @@ class PseudoCharBoxBuilder:
         for word, word_image, word_img_size, M, horizontal_text_bool, scale in \
                 zip(words, word_images, word_img_sizes, Ms, horizontal_text_bools, scales):
 
+            # from matplotlib import pyplot as plt
+            # print(word_image)
+            # plt.imshow(word_image)
+            # plt.show()
             scores = self.inference_word_box(net, word_image)
             word_img_h, word_img_w, _ = word_img_size
 

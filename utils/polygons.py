@@ -22,3 +22,10 @@ def sampling_points_from_mask(mask, num_points=20):
         points.append(sampling_points(poly, num_points=num_points))
 
     return points
+
+
+def check_polygon_validity(points):
+    points = np.array(points).reshape(-1, 2)
+    poly = Polygon(points)
+
+    return poly.is_valid
