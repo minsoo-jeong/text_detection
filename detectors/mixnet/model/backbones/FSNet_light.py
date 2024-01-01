@@ -229,7 +229,7 @@ def FSNet_S(pretrained = True):
         [4]
     ]
     model = FeatureShuffleNet(basisblock, channels = 64, numofblocks = numofblocks)
-    print("FSNet_S parameter size: ", count_parameters(model))
+    # print("FSNet_S parameter size: ", count_parameters(model))
     if pretrained:
         # load_path = "./pretrained/triHRnet_Synth_weight.pth"
         # cpt = torch.load(load_path)

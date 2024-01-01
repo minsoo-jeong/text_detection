@@ -133,7 +133,7 @@ def count_parameters(model):
 
 def FSNet_M(pretrained=False):
     model = FSNet()
-    print("MixNet backbone parameter size: ", count_parameters(model))
+    # print("MixNet backbone parameter size: ", count_parameters(model))
     if pretrained:
         load_path = "./pretrained/triHRnet_Synth_weight.pth"
         cpt = torch.load(load_path)
