@@ -73,7 +73,8 @@ class ICDAR15(Dataset):
             polygon = Polygon(np.array(points).reshape(-1, 2).astype(int))
             cliped = clip_by_rect(polygon, 0, 0, width - 1, height - 1)
 
-            if cliped.geom_type == 'Polygon' and not cliped.is_empty and cliped.area / polygon.area > self.label_min_area:
+            if (cliped.geom_type == 'Polygon' and not cliped.is_empty and cliped.area / (
+                    polygon.area + 1e-6) > self.label_min_area):
                 cliped_polygons.append(cliped)
                 cliped_words.append(words[pid])
 
