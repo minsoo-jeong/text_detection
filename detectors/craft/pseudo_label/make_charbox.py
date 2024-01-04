@@ -13,6 +13,8 @@ import pickle
 
 from collections import OrderedDict
 
+from shapely.geometry import Polygon, LineString
+
 from .watershed import exec_watershed_by_version
 from .data_manipulation import generate_affinity, generate_target
 
@@ -58,6 +60,22 @@ def img_normalize(src, mean=NORMALIZE_MEAN, var=NORMALIZE_VARIANCE):
     img -= mean
     img /= var
     return img
+
+
+def sort_vertices(polygon):
+    """
+    sort vertices in counter-clockwise order from the centroid
+    :param polygon:
+    :return: sorted polygon
+    """
+
+    centroid = np.array(polygon.centroid.xy).T[0]
+
+    angles = [np.degrees(np.arctan2(p[1] - centroid[1], p[0] - centroid[0])) for p in polygon.exterior.coords[:-1]]
+    normalized_angles = [(angle + 360) % 360 for angle in angles]
+    sorted_vertices = [vertex for _, vertex in
+                       sorted(zip(normalized_angles, polygon.exterior.coords[:-1]), key=lambda x: x[0], reverse=True)]
+    return Polygon(sorted_vertices)
 
 
 class PseudoCharBoxBuilder:
@@ -128,7 +146,7 @@ class PseudoCharBoxBuilder:
             #     img_normalize(word_image, NORMALIZE_MEAN, NORMALIZE_VARIANCE)
             # )
             # word_img_torch = word_img_torch.to(torch.device(f'cuda'))
-            word_img_torch=torch.from_numpy(word_image).permute(2, 0, 1).unsqueeze(0)
+            word_img_torch = torch.from_numpy(word_image).permute(2, 0, 1).unsqueeze(0)
             word_img_torch = word_img_torch.to(device)
             with torch.cuda.amp.autocast():
                 word_img_scores, _ = net(word_img_torch)
@@ -148,8 +166,10 @@ class PseudoCharBoxBuilder:
         return (real_len - min(real_len, abs(real_len - pseudo_len))) / real_len
 
     def split_word_equal_gap(self, word_img_w, word_img_h, word):
-        width = word_img_w
-        height = word_img_h
+        width, height = word_img_w, word_img_h
+
+        # width = word_img_w
+        # height = word_img_h
 
         width_per_char = width / len(word)
         bboxes = []
@@ -212,10 +232,6 @@ class PseudoCharBoxBuilder:
         for word, word_image, word_img_size, M, horizontal_text_bool, scale in \
                 zip(words, word_images, word_img_sizes, Ms, horizontal_text_bools, scales):
 
-            # from matplotlib import pyplot as plt
-            # print(word_image)
-            # plt.imshow(word_image)
-            # plt.show()
             scores = self.inference_word_box(net, word_image)
             word_img_h, word_img_w, _ = word_img_size
 
@@ -249,9 +265,7 @@ class PseudoCharBoxBuilder:
 
             M_inv = np.linalg.pinv(M)
             for i in range(len(pseudo_char_bbox)):
-                pseudo_char_bbox[i] = cv2.perspectiveTransform(
-                    pseudo_char_bbox[i][None, :, :], M_inv
-                )
+                pseudo_char_bbox[i] = cv2.perspectiveTransform(pseudo_char_bbox[i][None, :, :], M_inv)
             pseudo_char_bbox = self.clip_into_boundary(pseudo_char_bbox, image.shape)
             results['pseudo_char_bbox'].extend(pseudo_char_bbox)
             results['confidence'].append(confidence)
@@ -260,3 +274,76 @@ class PseudoCharBoxBuilder:
 
         return np.stack(results['pseudo_char_bbox']), results['confidence'], results['horizontal_text_bool'], results[
             'word_count']
+
+    def build_char_box2(self, net, image, polygons, words):
+        def crop_word_by_polygon(image, polygon, word):
+            polygon = Polygon(polygon)
+            rotated_rec = polygon.minimum_rotated_rectangle
+            if not (rotated_rec.geom_type == 'Polygon' and not rotated_rec.is_empty):
+                return False, None, None
+            sorted_polygon = sort_vertices(rotated_rec)
+            sorted_points = sorted_polygon.exterior.coords
+            lengths = [int(LineString([sorted_points[i], sorted_points[i + 1]]).length) for i in
+                       range(len(sorted_points) - 1)]
+            long, short = max(lengths), min(lengths)
+
+            src_points = np.array(sorted_points[:-1], dtype=np.float32)
+            if lengths[0] == long:
+                dst_points = np.array([[long, 0], [0, 0], [0, short], [long, short]], dtype=np.float32)
+            else:
+                dst_points = np.array([[0, 0], [0, short], [long, short], [long, 0]], dtype=np.float32)
+
+            transform = cv2.getPerspectiveTransform(src_points, dst_points)
+
+            warped = cv2.warpPerspective(image, transform, (int(long), int(short)))
+
+            return True, warped, transform
+
+        pseudo_char_bboxes = []
+        word_counts = []
+        for poly, word in zip(polygons, words):
+            flag, word_image, transform = crop_word_by_polygon(image, poly, word)
+            if not flag:
+                continue
+            scale = 128.0 / word_image.shape[0]
+            word_image = cv2.resize(word_image, None, fx=scale, fy=scale)
+            word_img_size = word_image.shape
+
+            scores = self.inference_word_box(net, word_image)
+            word_img_h, word_img_w, _ = word_img_size
+
+            region_score = scores[0, :, :, 0].cpu().numpy()
+            region_score = np.uint8(np.clip(region_score, 0, 1) * 255)
+
+            real_word_without_space = word.strip().replace(" ", "")
+            real_char_len = len(real_word_without_space)
+
+            region_score_rgb = cv2.resize(region_score, (word_img_w, word_img_h))
+            region_score_rgb = cv2.cvtColor(region_score_rgb, cv2.COLOR_GRAY2RGB)
+
+            pseudo_char_bbox = exec_watershed_by_version(self.watershed_param, region_score, word_image)
+
+            # Used for visualize only
+            # watershed_box = pseudo_char_bbox.copy()
+            pseudo_char_bbox = self.clip_into_boundary(pseudo_char_bbox, region_score_rgb.shape)
+            confidence = self.get_confidence(real_char_len, len(pseudo_char_bbox))
+
+            if confidence <= 0.5:
+                pseudo_char_bbox = self.split_word_equal_gap(word_img_w, word_img_h, word)
+                confidence = 0.5
+
+            if len(pseudo_char_bbox) != 0:
+                index = np.argsort(pseudo_char_bbox[:, 0, 0])
+                pseudo_char_bbox = pseudo_char_bbox[index]
+
+            pseudo_char_bbox /= scale
+
+            inv_transform = np.linalg.pinv(transform)
+            for i in range(len(pseudo_char_bbox)):
+                pseudo_char_bbox[i] = cv2.perspectiveTransform(pseudo_char_bbox[i][None, :, :], inv_transform)
+            pseudo_char_bbox = self.clip_into_boundary(pseudo_char_bbox, image.shape)
+
+            pseudo_char_bboxes.extend(pseudo_char_bbox)
+            word_counts.append(pseudo_char_bbox.shape[0])
+
+        return np.stack(pseudo_char_bboxes), [], [], word_counts

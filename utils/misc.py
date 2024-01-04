@@ -5,6 +5,7 @@ import random
 
 from collections import OrderedDict
 
+
 def set_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -15,6 +16,13 @@ def set_seed(seed):
     random.seed(seed)
 
 
+def compare_model_parameters(model1, model2, eps=0.):
+    for p1, p2 in zip(model1.parameters(), model2.parameters()):
+        if p1.data.ne(p2.data).sum() > eps:
+            return False
+    return True
+
+
 def filter_word(word, pattern='[^ㄱ-ㅎㅏ-ㅣ가-힣0-9a-zA-Z\s]'):
     word = word.replace(" ", "").lower()
     pattern = re.compile(pattern)
@@ -23,11 +31,9 @@ def filter_word(word, pattern='[^ㄱ-ㅎㅏ-ㅣ가-힣0-9a-zA-Z\s]'):
     return filtered
 
 
-
 def remove_module_prefix(state_dict):
+    _state_dict = OrderedDict()
 
-    _state_dict= OrderedDict()
-
-    for k,v in state_dict.items():
-        _state_dict[k.replace('module.','')]=v
+    for k, v in state_dict.items():
+        _state_dict[k.replace('module.', '')] = v
     return _state_dict

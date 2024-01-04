@@ -74,10 +74,12 @@ def init_distributed_mode(args):
 
 def gather_object(obj, rank, world, dst=0) -> List[object]:
     dist.barrier()
+
     received = [None] * world if rank == dst else None
-
     dist.gather_object(obj, received, dst=dst)
-
+    return received if rank == dst else None
+    # received = [None] * world
+    # dist.all_gather_object(received, obj)
     return received if rank == dst else None
 
 

@@ -8,8 +8,10 @@ from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import argparse
+import warnings
 import wandb
 import cv2
+import os
 
 from model.craft import CRAFT
 from dataset import craft_dataset
@@ -19,11 +21,13 @@ from text_detection.utils import init_distributed_mode, setup_for_distributed, s
     remove_module_prefix, AverageMeter, FscoreMeter, DetectionIoUEvaluator, gather_list, tensor_to_image, \
     hconcat_images, vconcat_images, draw_text
 
+warnings.filterwarnings(action='ignore', category=UserWarning)
+
 
 def train_one_epoch(model, loader, criterion, optimizer, scheduler, epoch, scaler, args):
     losses = AverageMeter()
 
-    if is_main_process():
+    if is_main_process() and args.wandb_entity:
         input_sample = visualize_samples(model, loader, 4, args)
         wandb.log({'Train/input': wandb.Image(input_sample)}, step=epoch)
 
@@ -60,7 +64,8 @@ def train_one_epoch(model, loader, criterion, optimizer, scheduler, epoch, scale
 
     if is_main_process():
         progress.close()
-        wandb.log({"Train/loss": losses.avg, "Train/LR": optimizer.param_groups[0]["lr"]}, step=epoch)
+        if args.wandb_entity:
+            wandb.log({"Train/loss": losses.avg, "Train/LR": optimizer.param_groups[0]["lr"]}, step=epoch)
 
     return {'train_loss': losses.avg, 'LR': optimizer.param_groups[0]["lr"]}
 
@@ -71,8 +76,9 @@ def test(model, loader, criterion, epoch, args, label='Test'):
     metrics = FscoreMeter()
     evaluator = DetectionIoUEvaluator()
 
-    if is_main_process():
+    if is_main_process() and args.wandb_entity:
         input_sample = visualize_samples(model, loader, 4, args)
+
         wandb.log({f'{label}/input': wandb.Image(input_sample)}, step=epoch)
 
     model.eval()
@@ -119,11 +125,12 @@ def test(model, loader, criterion, epoch, args, label='Test'):
 
     if is_main_process():
         progress.close()
-        wandb.log({f"{label}/loss": losses.avg,
-                   f"{label}/fscore": metrics.f1,
-                   f'{label}/precision': metrics.prec,
-                   f'{label}/recall': metrics.rec
-                   }, step=epoch)
+        if args.wandb_entity:
+            wandb.log({f"{label}/loss": losses.avg,
+                       f"{label}/fscore": metrics.f1,
+                       f'{label}/precision': metrics.prec,
+                       f'{label}/recall': metrics.rec
+                       }, step=epoch)
 
     return {'loss': losses.avg, 'fscore': metrics.f1, 'precision': metrics.prec, 'recall': metrics.rec}
 
@@ -192,8 +199,8 @@ def main_worker(gpu, args):
         checkpoint = torch.load(args.ckpt)
         if args.state_dict:
             checkpoint = checkpoint[args.state_dict]
-        model.load_state_dict(remove_module_prefix(checkpoint), strict=False)
-        label_model.load_state_dict(remove_module_prefix(checkpoint), strict=False)
+        model.load_state_dict(remove_module_prefix(checkpoint))
+        label_model.load_state_dict(remove_module_prefix(checkpoint))
         print(f'>> Load pretrained {args.ckpt}')
 
     if args.distributed:
@@ -209,15 +216,15 @@ def main_worker(gpu, args):
 
     # datasets
 
-    train_dataset = craft_dataset(f'{args.train_data_root}/train_images',
-                                  f'{args.train_data_root}/train_labels',
+    train_dataset = craft_dataset(os.path.join(f'{args.train_data_root}', 'train_images'),
+                                  os.path.join(f'{args.train_data_root}', 'train_labels'),
                                   label_model,
                                   label_format='polygon',
                                   transform=craft_dataset.train_transform(args.image_size)
                                   )
 
-    test_dataset = craft_dataset(f'{args.test_data_root}/test_images',
-                                 f'{args.test_data_root}/test_labels',
+    test_dataset = craft_dataset(os.path.join(f'{args.test_data_root}', 'test_images'),
+                                 os.path.join(f'{args.test_data_root}', 'test_labels'),
                                  label_model,
                                  label_format='polygon',
                                  transform=craft_dataset.default_transform(args.image_size_test, label=True))
@@ -282,7 +289,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--epoch', default=100, type=int, help='epoch')
-    parser.add_argument('--image_size', default=640, type=int, help='image size')
+    parser.add_argument('--image_size', default=1280, type=int, help='image size')
     parser.add_argument('--image_size_test', default=1280, type=int, help='image size')
     parser.add_argument('--learning_rate', default=1e-4, type=float, help='learning rate')
 
@@ -322,8 +329,8 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
 
     parser.add_argument('--seed', default=42, type=int, help='seed')
-    parser.add_argument('--wandb-entity', default='ms-jeong', type=str)
-    parser.add_argument('--project', default='AOS-craft', type=str, help='project name')
+    parser.add_argument('--wandb-entity', type=str, required=False)
+    parser.add_argument('--project', default='aos-textdet-doc-craft', type=str, help='project name')
     parser.add_argument('--exp', default=None, type=str, help='experiment name')
 
     args = parser.parse_args()

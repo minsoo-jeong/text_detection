@@ -45,12 +45,13 @@ class ICDAR15(Dataset):
 
             return image_tensor, polygons, words, str(path)
         else:
-            image = cv2.imread(str(item))
+            path = item
+            image = cv2.imread(str(path))
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             image_tensor = self.transform(image=image)['image']
 
-            return image_tensor, str(item)
+            return image_tensor, str(path)
 
     def __len__(self):
         return len(self.items)
@@ -110,7 +111,7 @@ class ICDAR15(Dataset):
                     continue
 
                 polygons.append(points)
-                word = word
+                word = filtered
                 words.append(word)
         return polygons, words
 
@@ -137,8 +138,8 @@ class ICDAR15(Dataset):
         transform = A.Compose(
             [
                 A.LongestMaxSize(size),
-                A.SafeRotate(45, border_mode=cv2.BORDER_CONSTANT, p=1),
                 A.RandomScale(scale_limit=(1., 2.), interpolation=cv2.INTER_CUBIC),
+                A.SafeRotate(15, border_mode=cv2.BORDER_CONSTANT),
                 A.RandomResizedCrop(size, size, scale=(0.03, 0.1), interpolation=cv2.INTER_CUBIC),
                 A.ColorJitter(brightness=.2, contrast=.2, saturation=.2, hue=.2, always_apply=False, p=0.5),
                 A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT, value=0),
@@ -147,57 +148,3 @@ class ICDAR15(Dataset):
             ], keypoint_params=A.KeypointParams(format='xy', remove_invisible=False, label_fields=['polygon_id']))
 
         return transform
-
-
-if __name__ == '__main__':
-
-    from matplotlib import pyplot as plt
-    from text_detection.utils import set_seed, tensor_to_image
-
-    set_seed(88)
-
-    root = '/data/OCR/023.OCR 데이터(공공)/01-1.정식개방데이터/sample01'
-    root = '/mldisk2/ms/datasets/OCR/055.금융업 특화 문서 OCR 데이터/toy_1'
-    # root = '/workspace/data/aos-invoice/sample01'
-    # root = '/mldisk2/ms/datasets/OCR/AOS_OCR/parts_invoice/sample01'
-    size = 1536
-
-    dataset = ICDAR15(f'{root}/test_images',
-                      f'{root}/test_labels',
-                      label_format='bbox',  # 'polygon',
-                      transform=ICDAR15.train_transform(size))
-
-    for image, polygons, words, path in dataset:
-        im = tensor_to_image(image)
-        # im = image.cpu().numpy().copy() * 255
-        # im = im.astype(np.uint8).transpose(1, 2, 0)
-
-        if dataset.label_format == 'bbox':
-            for rec in polygons:
-                cv2.rectangle(im, (rec[0], rec[1]), (rec[2], rec[3]), (0, 255, 0), 2)
-        else:
-            cv2.polylines(im, polygons, True, (0, 255, 0), 2)
-
-        plt.imshow(im)
-        plt.show()
-
-        break
-
-    from torch.utils.data import DataLoader
-
-    loader = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate, shuffle=False, num_workers=4)
-
-    for batch in loader:
-
-        for image, polygons, words, path in zip(*batch):
-
-            im = tensor_to_image(image).copy()
-            if loader.dataset.label_format == 'bbox':
-                for rec in polygons:
-                    cv2.rectangle(im, (rec[0], rec[1]), (rec[2], rec[3]), (0, 255, 0), 2)
-            else:
-                cv2.polylines(im, polygons, True, (0, 255, 0), 2)
-
-            plt.imshow(im)
-            plt.show()
-        break
