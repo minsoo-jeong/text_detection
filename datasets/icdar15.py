@@ -140,7 +140,7 @@ class ICDAR15(Dataset):
                 A.LongestMaxSize(size),
                 A.RandomScale(scale_limit=(1., 2.), interpolation=cv2.INTER_CUBIC),
                 A.SafeRotate(15, border_mode=cv2.BORDER_CONSTANT),
-                A.RandomResizedCrop(size, size, scale=(0.03, 0.1), interpolation=cv2.INTER_CUBIC),
+                A.RandomResizedCrop(size, size, scale=(0.03, 1.), interpolation=cv2.INTER_CUBIC),
                 A.ColorJitter(brightness=.2, contrast=.2, saturation=.2, hue=.2, always_apply=False, p=0.5),
                 A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT, value=0),
                 A.Normalize(),

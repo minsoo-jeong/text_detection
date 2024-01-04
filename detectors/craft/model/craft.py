@@ -93,11 +93,8 @@ class CRAFT(nn.Module):
                                        poly)
 
             for i in range(len(boxes)):
-                boxes[i][..., 0] *= 2
-                boxes[i][..., 1] *= 2
-
-            # append polys to boxes
-            # boxes += [poly for poly in polys if poly is not None]
+                boxes[i][..., 0] *= 2.
+                boxes[i][..., 1] *= 2.
 
             bboxes.append(boxes)
 

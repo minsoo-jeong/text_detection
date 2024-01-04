@@ -32,6 +32,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scheduler, epoch, scale
         wandb.log({'Train/input': wandb.Image(input_sample)}, step=epoch)
 
     model.train()
+    loader.dataset.label_model.eval()
     progress = tqdm(loader, ncols=180) if is_main_process() else None
     if args.distributed:
         loader.sampler.set_epoch(epoch)
@@ -194,13 +195,13 @@ def main_worker(gpu, args):
 
     # Model
     model = CRAFT().to(args.device)
-    label_model = CRAFT().to(args.device)
+    label_model = CRAFT().to(args.device).eval()
     if args.ckpt:
         checkpoint = torch.load(args.ckpt)
         if args.state_dict:
             checkpoint = checkpoint[args.state_dict]
         model.load_state_dict(remove_module_prefix(checkpoint))
-        label_model.load_state_dict(remove_module_prefix(checkpoint))
+        label_model.load_state_dict(model.state_dict())
         print(f'>> Load pretrained {args.ckpt}')
 
     if args.distributed:
@@ -248,7 +249,6 @@ def main_worker(gpu, args):
                               num_workers=args.worker,
                               shuffle=True if train_sampler is None else False,
                               )
-
     test_loader = DataLoader(test_dataset,
                              collate_fn=test_dataset.collate,
                              sampler=test_sampler,
@@ -267,15 +267,16 @@ def main_worker(gpu, args):
         wandb.config.update(args)
 
     if args.init_eval:
-        test(model, test_loader, criterion, 0, args)
         test(model, test_loader2, criterion, 0, args, label='AOS')
+        test(model, test_loader, criterion, 0, args)
+      
 
     for epoch in range(1, args.epoch):
         train_one_epoch(model, train_loader, criterion, optimizer, scheduler, epoch, scaler, args)
-        test(model, test_loader, criterion, epoch, args)
         test(model, test_loader2, criterion, epoch, args, label='AOS')
+        test(model, test_loader, criterion, epoch, args)
 
-        ckpt = remove_module_prefix(model.state_dict())
+        ckpt = model.module.state_dict() if args.distributed else model.state_dict()
         label_model.load_state_dict(ckpt)
 
         if is_main_process():
@@ -329,7 +330,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
 
     parser.add_argument('--seed', default=42, type=int, help='seed')
-    parser.add_argument('--wandb-entity', type=str, required=False)
+    parser.add_argument('--wandb-entity', type=str, required=False, )
     parser.add_argument('--project', default='aos-textdet-doc-craft', type=str, help='project name')
     parser.add_argument('--exp', default=None, type=str, help='experiment name')
 
