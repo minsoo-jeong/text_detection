@@ -95,10 +95,10 @@ def test(model, loader, criterion, epoch, args, label='Test'):
         batch_results = []
 
         postprocess = model.postprocess if not args.distributed else model.module.postprocess
-        pred_bboxes = postprocess(outputs,
-                                  char_threshold=args.char_threshold,
-                                  link_threshold=args.link_threshold,
-                                  word_threshold=args.word_threshold)
+        pred_bboxes, _ = postprocess(outputs,
+                                     char_threshold=args.char_threshold,
+                                     link_threshold=args.link_threshold,
+                                     word_threshold=args.word_threshold)
 
         for bidx, (pred, gt) in enumerate(zip(pred_bboxes, gt_bboxes)):
             result = evaluator.evaluate_image(
@@ -155,10 +155,10 @@ def visualize_samples(model, loader, num_samples, args):
         outputs, _ = model(image_tensor.to(args.device).unsqueeze(0))
 
         postprocess = model.postprocess if not args.distributed else model.module.postprocess
-        pred_bboxes = postprocess(outputs,
-                                  char_threshold=args.char_threshold,
-                                  link_threshold=args.link_threshold,
-                                  word_threshold=args.word_threshold)
+        pred_bboxes, _ = postprocess(outputs,
+                                     char_threshold=args.char_threshold,
+                                     link_threshold=args.link_threshold,
+                                     word_threshold=args.word_threshold)
 
         result = EasyDict(evaluator.evaluate_image(
             [dict(points=point, text=word, ignore=word == '###') for point, word in zip(gt_bboxes, words)],
@@ -269,7 +269,6 @@ def main_worker(gpu, args):
     if args.init_eval:
         test(model, test_loader2, criterion, 0, args, label='AOS')
         test(model, test_loader, criterion, 0, args)
-      
 
     for epoch in range(1, args.epoch):
         train_one_epoch(model, train_loader, criterion, optimizer, scheduler, epoch, scaler, args)

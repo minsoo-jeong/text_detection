@@ -88,14 +88,17 @@ class CRAFT(nn.Module):
         score_link = preds[..., 1].cpu().data.numpy().astype(np.float32)
 
         bboxes = []
+        confidences = []
         for i in range(batch):
-            boxes, polys = getDetBoxes(score_text[i], score_link[i], word_threshold, link_threshold, char_threshold,
-                                       poly)
+            boxes, polys, conf = getDetBoxes(score_text[i], score_link[i], word_threshold, link_threshold,
+                                             char_threshold,
+                                             poly)
 
             for i in range(len(boxes)):
                 boxes[i][..., 0] *= 2.
                 boxes[i][..., 1] *= 2.
 
             bboxes.append(boxes)
+            confidences.append(conf)
 
-        return bboxes
+        return bboxes, confidences
