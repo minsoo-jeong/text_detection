@@ -69,8 +69,8 @@ class TextNet(nn.Module):
 
         init_polys = [init_polys[index == batch] for batch in range(b)]
         pred_polys = [pred_polys[index == batch] for batch in range(b)]
-
-        return init_polys, pred_polys, midlines if self.mid else None
+        confs = [confs[index == batch] for batch in range(b)]
+        return init_polys, pred_polys, midlines if self.mid else None, confs
 
     def _generate_boundary(self, dist_preds, cls_preds, dist_threshold=.3, cls_threshold=.85):
         confidences = []

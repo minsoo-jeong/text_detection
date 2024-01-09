@@ -55,14 +55,16 @@ def textDetector(model: torch.nn.Module, img: Image, device: torch.device, size:
 
     tensor = tensor.unsqueeze(0).to(device)
 
-    polys0, polys, midlines = model(tensor)
+    polys0, polys, midlines, confs = model(tensor)
 
     polys = polys[0]
     if not len(polys):
         return []
 
-    # scale polygons
+    confs = confs[0].cpu().numpy()
     polys = polys.cpu().numpy()
+
+    # scale polygons
     ratio = min(tw / w, th / h)
     pad = ((tw - w * ratio) // 2, (th - h * ratio) // 2)
     polys[..., 0] -= pad[0]
@@ -72,9 +74,9 @@ def textDetector(model: torch.nn.Module, img: Image, device: torch.device, size:
 
     # polygon -> bbox
     pred_text = []
-    for poly in polys:
+    for poly, conf in zip(polys, confs):
         x1, y1, x2, y2 = np.min(poly[..., 0]), np.min(poly[..., 1]), np.max(poly[..., 0]), np.max(poly[..., 1])
-        pred_text.append([x1, y1, x2, y2])
+        pred_text.append([x1, y1, x2, y2, conf])
 
     pred_text = np.array(pred_text)
     return pred_text
@@ -104,7 +106,10 @@ if __name__ == '__main__':
     from pathlib import Path
     import time
 
-    visualize = False
+    visualize = True
+    vis_path = Path('examples/ret')
+    if visualize and not vis_path.exists():
+        vis_path.mkdir(parents=True)
 
     root = Path('/mldisk2/ms/datasets/OCR/AOS_OCR/AOS_Test')
     images = root.rglob('*.jpg')
@@ -120,13 +125,16 @@ if __name__ == '__main__':
             im = cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
         im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
 
-        t, bboxes = textDetector(net, im, 0, 640)
+        t, preds = textDetector(net, im, 0, 640)
         elapsed += t
         if visualize:  # visualize
             vis = np.array(im)
-            for bbox in bboxes:
+            for *bbox, score in preds:
+                bbox = list(map(int, bbox))
                 cv2.rectangle(vis, bbox[:2], bbox[2:], (255, 0, 0), 2)
+                cv2.putText(vis, f'{score:.2f}', bbox[:2], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
             vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(f'examples/ret/{image.name}', vis)
+            cv2.imwrite(vis_path.joinpath(image.name).as_posix(), vis)
 
     print(elapsed, elapsed / len(images))
